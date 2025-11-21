@@ -4,6 +4,60 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:flex_color_scheme/flex_color_scheme.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+
+void main() {
+  runApp(const EspConfigApp());
+}
+
+class EspConfigApp extends StatelessWidget {
+  const EspConfigApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ESP32 Config',
+      debugShowCheckedModeBanner: false,
+      theme: FlexThemeData.light(
+        scheme: FlexScheme.mandyRed,
+        surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
+        blendLevel: 7,
+        subThemesData: const FlexSubThemesData(
+          blendOnLevel: 10,
+          blendOnColors: false,
+          useTextTheme: true,
+          useM2StyleDividerInM3: true,
+          alignedDropdown: true,
+          useInputDecoratorThemeInDialogs: true,
+        ),
+        visualDensity: FlexColorScheme.comfortablePlatformDensity,
+        useMaterial3: true,
+        swapLegacyOnMaterial3: true,
+        fontFamily: GoogleFonts.notoSans().fontFamily,
+      ),
+      darkTheme: FlexThemeData.dark(
+        scheme: FlexScheme.mandyRed,
+        surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
+        blendLevel: 13,
+        subThemesData: const FlexSubThemesData(
+          blendOnLevel: 20,
+          useTextTheme: true,
+          useM2StyleDividerInM3: true,
+          alignedDropdown: true,
+          useInputDecoratorThemeInDialogs: true,
+        ),
+        visualDensity: FlexColorScheme.comfortablePlatformDensity,
+        useMaterial3: true,
+        swapLegacyOnMaterial3: true,
+        fontFamily: GoogleFonts.notoSans().fontFamily,
+      ),
+      themeMode: ThemeMode.system,
+      home: const EspConfigPage(),
+    );
+  }
+}
 
 class EspConfigPage extends StatefulWidget {
   const EspConfigPage({super.key});
@@ -29,7 +83,7 @@ class _EspConfigPageState extends State<EspConfigPage> {
   BluetoothCharacteristic? _writeChar;
   bool _isScanning = false;
   bool _isConnected = false;
-  String _statusLog = "请点击扫描查找设备";
+  String _statusLog = "准备扫描";
 
   List<dynamic> _presets = [];
   Map<String, dynamic>? _selectedPreset;
@@ -61,9 +115,12 @@ class _EspConfigPageState extends State<EspConfigPage> {
     }
   }
 
+  void _log(String message) {
+    setState(() => _statusLog = message);
+  }
+
   // 1. 扫描设备
   Future<void> startScan() async {
-    // 显式请求权限 (Android 12+ 需要 BLUETOOTH_SCAN/CONNECT, 旧版需要 LOCATION)
     Map<Permission, PermissionStatus> statuses = await [
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
@@ -71,7 +128,7 @@ class _EspConfigPageState extends State<EspConfigPage> {
     ].request();
 
     if (statuses.values.any((s) => s.isDenied || s.isPermanentlyDenied)) {
-      setState(() => _statusLog = "权限被拒绝，无法扫描。请在设置中开启权限。");
+      _log("权限被拒绝。请在设置中开启蓝牙权限。");
       return;
     }
 
@@ -81,49 +138,37 @@ class _EspConfigPageState extends State<EspConfigPage> {
       _targetDevice = null;
     });
 
-    // 检查蓝牙是否开启
     if (await FlutterBluePlus.adapterState.first != BluetoothAdapterState.on) {
       try {
         await FlutterBluePlus.turnOn();
       } catch (e) {
-        setState(() => _statusLog = "请打开蓝牙");
+        _log("请打开蓝牙");
         return;
       }
     }
 
     try {
-      // 开始扫描
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-
-      // 等待扫描结束
       await Future.delayed(const Duration(seconds: 10));
 
-      // 如果扫描结束后仍未找到设备
       if (_targetDevice == null && mounted) {
         setState(() {
           _isScanning = false;
-          _statusLog = "未找到设备 (ESP32-Config)\n请确保设备已开启且在附近";
+          _statusLog = "未找到设备 (ESP32-Config)。请确保设备已开启。";
         });
       }
     } catch (e) {
-      setState(() => _statusLog = "扫描启动失败: $e");
+      _log("扫描失败: $e");
       return;
     }
 
-    // 监听扫描结果
     FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
-        // Debug: 显示所有发现的设备
-        if (r.device.platformName.isNotEmpty) {
-          print("Found: ${r.device.platformName}");
-        }
-
-        // 通过设备名称过滤 (必须与 MicroPython 中的 DEVICE_NAME 一致)
         if (r.device.platformName == "ESP32-Config") {
           FlutterBluePlus.stopScan();
           setState(() {
             _targetDevice = r.device;
-            _statusLog = "找到设备: ${r.device.remoteId}\n点击“连接”继续";
+            _statusLog = "找到设备: ${r.device.remoteId}\n点击“连接”继续。";
             _isScanning = false;
           });
           break;
@@ -136,12 +181,11 @@ class _EspConfigPageState extends State<EspConfigPage> {
   Future<void> connectDevice() async {
     if (_targetDevice == null) return;
 
-    setState(() => _statusLog = "正在连接...");
+    _log("正在连接...");
 
     try {
       await _targetDevice!.connect();
 
-      // Android 上通常需要请求更大的 MTU 以发送长数据 (如 JSON)
       if (Platform.isAndroid) {
         try {
           await _targetDevice!.requestMtu(512);
@@ -150,11 +194,10 @@ class _EspConfigPageState extends State<EspConfigPage> {
         }
       }
 
-      setState(() => _statusLog = "正在寻找服务...");
+      _log("正在发现服务...");
       List<BluetoothService> services = await _targetDevice!.discoverServices();
 
       BluetoothService? targetService;
-      // 查找目标服务
       for (var s in services) {
         if (s.uuid.toString().toUpperCase() == SERVICE_UUID) {
           targetService = s;
@@ -163,7 +206,6 @@ class _EspConfigPageState extends State<EspConfigPage> {
       }
 
       if (targetService != null) {
-        // 查找目标特征值
         for (var c in targetService.characteristics) {
           if (c.uuid.toString().toUpperCase() == CHAR_UUID) {
             _writeChar = c;
@@ -175,14 +217,14 @@ class _EspConfigPageState extends State<EspConfigPage> {
       if (_writeChar != null) {
         setState(() {
           _isConnected = true;
-          _statusLog = "已连接！请修改参数并发送。";
+          _statusLog = "已连接！准备配置。";
         });
       } else {
-        setState(() => _statusLog = "错误：未找到目标特征值");
+        _log("错误：未找到目标特征值");
         await _targetDevice!.disconnect();
       }
     } catch (e) {
-      setState(() => _statusLog = "连接失败: $e");
+      _log("连接失败: $e");
     }
   }
 
@@ -193,23 +235,20 @@ class _EspConfigPageState extends State<EspConfigPage> {
     String mac = _macCtrl.text.trim().toUpperCase();
     String hex = _hexCtrl.text.trim().toUpperCase();
 
-    // 简单的格式校验
     if (mac.length != 17 || !mac.contains(':')) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("MAC 地址格式错误 (XX:XX:...)")));
+      ).showSnackBar(const SnackBar(content: Text("MAC 地址格式无效 (XX:XX:...)")));
       return;
     }
 
-    // 构建 JSON 数据
     Map<String, String> config = {"mac": mac, "adv_hex": hex};
     String jsonStr = jsonEncode(config);
 
-    setState(() => _statusLog = "正在发送配置...");
-    print("Sending JSON: $jsonStr"); // Debug log
+    _log("正在发送配置...");
+    print("Sending JSON: $jsonStr");
 
     try {
-      // 分包发送：MTU 协商可能失败，最稳妥的方式是按 20 字节分包
       List<int> bytes = utf8.encode(jsonStr);
       int chunkSize = 20;
 
@@ -217,14 +256,9 @@ class _EspConfigPageState extends State<EspConfigPage> {
         int end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
         List<int> chunk = bytes.sublist(i, end);
 
-        print("Sending chunk ${i ~/ chunkSize + 1}: ${utf8.decode(chunk)}");
-
         try {
-          // 使用 withoutResponse: false (即 WriteWithResponse) 确保包的顺序和送达
           await _writeChar!.write(chunk, withoutResponse: false);
         } catch (e) {
-          // 如果是最后一个包，且发生异常，可能是因为设备重启太快导致连接断开
-          // 既然 ESP32 端已经确认收到，我们可以忽略这个错误
           if (end == bytes.length) {
             print("Last chunk write error (ignored): $e");
           } else {
@@ -233,9 +267,8 @@ class _EspConfigPageState extends State<EspConfigPage> {
         }
       }
 
-      setState(() => _statusLog = "发送成功！\n设备将自动重启并应用新配置。");
+      _log("成功！设备正在重启...");
 
-      // 延迟一会后断开
       await Future.delayed(const Duration(seconds: 2));
       await _targetDevice!.disconnect();
       setState(() {
@@ -243,115 +276,297 @@ class _EspConfigPageState extends State<EspConfigPage> {
         _targetDevice = null;
       });
     } catch (e) {
-      setState(() => _statusLog = "发送失败: $e");
+      _log("发送失败: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("ESP32 广播修改器")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          bool isTablet = constraints.maxWidth > 600;
+          return Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                color: Colors.grey[200],
-                child: Text(
-                  _statusLog,
-                  style: const TextStyle(color: Colors.blue),
+              if (isTablet)
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    child: _buildSidePanel(context),
+                  ),
+                ),
+              Expanded(
+                flex: 3,
+                child: Scaffold(
+                  appBar: AppBar(
+                    title: const Text("ESP32 配置工具"),
+                    centerTitle: !isTablet,
+                    elevation: 0,
+                    backgroundColor: Colors.transparent,
+                    titleTextStyle: GoogleFonts.outfit(
+                      color: Theme.of(context).colorScheme.onSurface,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  body: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: isTablet
+                        ? _buildMainContent(context)
+                        : SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildStatusCard(context),
+                                const SizedBox(height: 24),
+                                _buildScanSection(context),
+                                const SizedBox(height: 24),
+                                if (_isConnected) ...[
+                                  const Divider(),
+                                  const SizedBox(height: 24),
+                                  _buildConfigForm(context),
+                                ],
+                                const SizedBox(height: 40),
+                                Center(
+                                  child: Text(
+                                    "power by xinghe98",
+                                    style: GoogleFonts.outfit(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.outline,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // 扫描区域
-              if (!_isConnected) ...[
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.bluetooth_searching_rounded),
-                  label: Text(
-                    _isScanning ? "扫描中..." : "1. 扫描设备 (ESP32-Config)",
-                  ),
-                  onPressed: _isScanning ? null : startScan,
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.bluetooth_connected),
-                  label: const Text("2. 连接设备"),
-                  onPressed: _targetDevice != null ? connectDevice : null,
-                ),
-              ],
-
-              // 编辑区域
-              if (_isConnected) ...[
-                const Divider(height: 40),
-                // 预设选择
-                if (_presets.isNotEmpty) ...[
-                  const Text(
-                    "选择预设配置:",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  DropdownButton<Map<String, dynamic>>(
-                    isExpanded: true,
-                    hint: const Text("请选择设备..."),
-                    value: _selectedPreset,
-                    items: _presets.map((preset) {
-                      return DropdownMenuItem<Map<String, dynamic>>(
-                        value: preset,
-                        child: Text(preset['name']),
-                      );
-                    }).toList(),
-                    onChanged: (val) => _onPresetChanged(val),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                const Text(
-                  "目标 MAC 地址:",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextField(
-                  controller: _macCtrl,
-                  decoration: const InputDecoration(
-                    hintText: "例如: 7C:88:99:94:E8:62",
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  "广播 Hex 数据 (Raw):",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextField(
-                  controller: _hexCtrl,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText: "例如: 020106...",
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                  onPressed: sendConfig,
-                  child: const Text(
-                    "3. 发送并重启设备",
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ),
-              ],
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
-}
 
-void main() {
-  runApp(const MaterialApp(home: EspConfigPage()));
+  Widget _buildSidePanel(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            "设备状态",
+            style: GoogleFonts.outfit(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildStatusCard(context),
+          const Spacer(),
+          _buildScanSection(context),
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              "power by xinghe98",
+              style: GoogleFonts.outfit(
+                color: Theme.of(context).colorScheme.outline,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainContent(BuildContext context) {
+    if (!_isConnected) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.bluetooth_searching,
+              size: 80,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "请连接设备以进行配置",
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return SingleChildScrollView(child: _buildConfigForm(context));
+  }
+
+  Widget _buildStatusCard(BuildContext context) {
+    return Card(
+      elevation: 0,
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "日志输出",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _statusLog,
+              style: GoogleFonts.firaCode(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate().fadeIn().slideY(begin: 0.1, end: 0);
+  }
+
+  Widget _buildScanSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!_isConnected) ...[
+          FilledButton.icon(
+            icon: _isScanning
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.search_rounded),
+            label: Text(_isScanning ? "扫描中..." : "扫描设备"),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: _isScanning ? null : startScan,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.link_rounded),
+            label: const Text("连接设备"),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: _targetDevice != null ? connectDevice : null,
+          ),
+        ] else
+          FilledButton.icon(
+            icon: const Icon(Icons.link_off_rounded),
+            label: const Text("断开连接"),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () async {
+              await _targetDevice?.disconnect();
+              setState(() {
+                _isConnected = false;
+                _targetDevice = null;
+                _statusLog = "已断开连接";
+              });
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildConfigForm(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "配置选项",
+          style: GoogleFonts.outfit(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 24),
+        if (_presets.isNotEmpty) ...[
+          DropdownButtonFormField<Map<String, dynamic>>(
+            decoration: InputDecoration(
+              labelText: "选择预设配置",
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              filled: true,
+            ),
+            value: _selectedPreset,
+            items: _presets.map((preset) {
+              return DropdownMenuItem<Map<String, dynamic>>(
+                value: preset,
+                child: Text(preset['name']),
+              );
+            }).toList(),
+            onChanged: _onPresetChanged,
+          ),
+          const SizedBox(height: 24),
+        ],
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            icon: const Icon(Icons.send_rounded),
+            label: const Text("应用配置"),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            onPressed: sendConfig,
+          ),
+        ),
+      ],
+    ).animate().fadeIn().slideX(begin: 0.1, end: 0);
+  }
 }
