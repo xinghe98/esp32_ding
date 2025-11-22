@@ -42,7 +42,7 @@ class ScanView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            "请确保您的 ESP32 设备已开启\n并处于广播模式",
+            "请确保您的设备已通电\n并在此附近",
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -63,7 +63,7 @@ class ScanView extends StatelessWidget {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: const Text("⚠️ 未找到设备，请确保设备已开启"),
+                                content: const Text("⚠️ 未找到设备，请确保设备已通电，并在此附近"),
                                 backgroundColor: Theme.of(
                                   context,
                                 ).colorScheme.error,

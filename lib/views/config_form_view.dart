@@ -115,7 +115,7 @@ class _ConfigFormViewState extends State<ConfigFormView> {
           if (widget.controller.presets.isNotEmpty)
             DropdownButtonFormField<dynamic>(
               decoration: const InputDecoration(
-                labelText: "快速配置预设",
+                labelText: "修改网点",
                 prefixIcon: Icon(Icons.bookmarks_rounded),
               ),
               value: _selectedPreset,
@@ -189,7 +189,7 @@ class _ConfigFormViewState extends State<ConfigFormView> {
                     ),
                   )
                 : const Icon(Icons.send_rounded),
-            label: Text(widget.controller.isSending ? "正在写入..." : "应用配置"),
+            label: Text(widget.controller.isSending ? "正在写入..." : "应用修改"),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 18),
               shape: RoundedRectangleBorder(
