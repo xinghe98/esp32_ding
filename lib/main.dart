@@ -17,7 +17,7 @@ class EspConfigApp extends StatelessWidget {
     const FlexScheme scheme = FlexScheme.deepBlue;
 
     return MaterialApp(
-      title: '网点更换',
+      title: '网点更换器',
       debugShowCheckedModeBanner: false,
       theme: FlexThemeData.light(
         scheme: scheme,
