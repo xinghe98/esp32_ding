@@ -7,8 +7,6 @@ void main() {
   runApp(const EspConfigApp());
 }
 
-// --- App Entry Point & Theme ---
-
 class EspConfigApp extends StatelessWidget {
   const EspConfigApp({super.key});
 

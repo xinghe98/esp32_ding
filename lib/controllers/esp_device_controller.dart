@@ -8,22 +8,20 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class EspDeviceController extends ChangeNotifier {
-  // Constants
+  // BLE UUID 定义
   final String SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
   final String CHAR_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
 
-  // State
+  // 设备状态
   BluetoothDevice? targetDevice;
   BluetoothCharacteristic? writeChar;
   bool isScanning = false;
   bool isConnecting = false;
   bool isSending = false;
 
-  // Logs
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
 
-  // Presets
   List<dynamic> presets = [];
 
   EspDeviceController() {
@@ -50,13 +48,14 @@ class EspDeviceController extends ChangeNotifier {
     List<Permission> permissions = [];
 
     if (Platform.isAndroid) {
-      // Android 12+
+      // Android 12+ 需要特定权限
       permissions.addAll([
         Permission.bluetoothScan,
         Permission.bluetoothConnect,
       ]);
 
-      // Android 10-11 Check
+      // Android 10-11 兼容 (使用定位权限)
+
       try {
         final locationStatus = await Permission.location.status;
         if (locationStatus.isDenied) {
@@ -90,18 +89,18 @@ class EspDeviceController extends ChangeNotifier {
   Future<void> startScan({VoidCallback? onTimeout}) async {
     if (!await checkPermissions()) return;
 
-    // Check Bluetooth State
+    // 确保蓝牙已开启
     final state = await FlutterBluePlus.adapterState.first;
     if (state != BluetoothAdapterState.on) {
       if (Platform.isAndroid) {
         try {
           await FlutterBluePlus.turnOn();
         } catch (e) {
-          log("⚠️ 无法自动开启蓝牙，请手动开启");
+          log("⚠️ 无法自动开启蓝牙。");
           return;
         }
       } else {
-        log("⚠️ 蓝牙未开启，请在系统设置中开启蓝牙");
+        log("⚠️ 蓝牙未开启，请在设置中开启。");
         return;
       }
     }
@@ -114,7 +113,7 @@ class EspDeviceController extends ChangeNotifier {
     try {
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
 
-      // Listen for results
+      // 监听扫描结果
       var subscription = FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
           if (r.device.platformName == "ESP32-Config") {
@@ -124,7 +123,8 @@ class EspDeviceController extends ChangeNotifier {
         }
       });
 
-      // Auto stop after timeout if not found
+      // 超时停止扫描
+
       await Future.delayed(const Duration(seconds: 10));
       if (isScanning) {
         await FlutterBluePlus.stopScan();
@@ -149,8 +149,8 @@ class EspDeviceController extends ChangeNotifier {
     isScanning = false;
     log("✅ 找到设备: ${device.remoteId}");
     notifyListeners();
-    // Auto connect? Optional. Let's keep it manual or auto-trigger connect.
-    // Let's auto-connect for better UX
+
+    // 自动连接以提升体验
     connectDevice();
   }
 
@@ -244,7 +244,7 @@ class EspDeviceController extends ChangeNotifier {
       List<int> bytes = utf8.encode(jsonStr);
       int chunkSize = 20;
 
-      // Determine write type
+      // 检查是否支持无响应写入以提高速度
       bool withoutResponse = false;
       if (writeChar!.properties.writeWithoutResponse) {
         withoutResponse = true;
